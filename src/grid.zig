@@ -19,10 +19,10 @@ pub const Grid = struct {
         return Self{ .width = width, .height = height, .cells = cells, .generation = 0 };
     }
 
-    /// Formula index(row, column) = row * width + column
-    fn getIndex(self: Self, row: u32, column: u32) IndexOutOfBoundsError!usize {
-        if (row >= 0 and row < self.height and column >= 0 and column < self.width) {
-            return row * self.width + column;
+    /// Formula index(x, y) = y * width + x
+    fn getIndex(self: Self, x: usize, y: usize) IndexOutOfBoundsError!usize {
+        if (y >= 0 and y < self.height and x >= 0 and x < self.width) {
+            return y * self.width + x;
         } else {
             return error.OutOfBounds;
         }
@@ -34,37 +34,56 @@ pub const Grid = struct {
         }
     }
 
-    /// row idx / width
-    /// floor(1 / 10) = 0
-    /// floor(9/10) = 0
-    /// floor(11 / 10) = 1
-    fn getRow(self: Self, idx: usize) IndexOutOfBoundsError!u32 {
+    fn getX(self: Self, idx: usize) IndexOutOfBoundsError!u32 {
+        try self.checkIndexOutOfBounds(idx);
+
+        var idx_u32: u32 = @intCast(idx);
+        return @mod(idx_u32, self.width);
+    }
+
+    fn getY(self: Self, idx: usize) IndexOutOfBoundsError!u32 {
         try self.checkIndexOutOfBounds(idx);
 
         return @intCast(idx / self.width);
     }
 
-    // column = row * width
-    fn getColumn(self: Self, idx: usize) IndexOutOfBoundsError!u32 {
-        try self.checkIndexOutOfBounds(idx);
-    }
-
-    fn liveNeighbourCount(self: Self, row: u32, column: u32) u8 {
+    /// Assumes that there is a finite board, so there are special
+    /// check for the corner and top, right, bottom and left cases.
+    fn liveNeighbourCount(self: Self, x: usize, y: usize) IndexOutOfBoundsError!u8 {
         var count: u8 = 0;
 
-        var idx = self.getIndex(row, column);
-        _ = idx;
+        // We skip calculating alive neighbours for the outer border of the board.
+        if (y > 0 and y < self.height - 1 and x > 0 and x < self.width - 1) {
+            // Every cell has 8 neigbours
+            // TODO: This whole thing is pretty dogwater, need to find a better way
+            var col: i32 = -1;
+            var row: i32 = -1;
+            while (row <= 1) : (row += 1) {
+                while (col <= 1) : (col += 1) {
+                    if (row == 0 and col == 0) {
+                        //continue;
+                    } else {
+                        // TODO: This is sooo soo bad, find a better way
+                        var x_i32: i32 = @intCast(x);
+                        var y_i32: i32 = @intCast(y);
+
+                        var neighbour_x_idx = x_i32 + col;
+                        var neighbour_y_idx = y_i32 + row;
+
+                        var neighbour_x_idx_usize: usize = @intCast(neighbour_x_idx);
+                        var neighbour_y_idx_usize: usize = @intCast(neighbour_y_idx);
+
+                        var idx = try self.getIndex(neighbour_x_idx_usize, neighbour_y_idx_usize);
+                        if (self.cells[idx] == .alive) {
+                            count += 1;
+                        }
+                    }
+                }
+                col = -1;
+            }
+        }
 
         return count;
-    }
-
-    fn liveNeighbourCountByIdx(self: Self, idx: usize) u8 {
-        _ = self;
-        // First row is special
-        if (idx) {}
-        // First column is special
-        // Last column is special
-        // Last row is special
     }
 
     /// The universe of the Game of Life is an infinite two-dimensional orthogonal grid of square cells,
@@ -94,16 +113,86 @@ pub const Grid = struct {
     }
 };
 
-test "test getRow" {
+test "test getX" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
     var grid = try Grid.init(grid_width, grid_height);
 
-    try std.testing.expectEqual(@as(u32, 0), try grid.getRow(0));
-    try std.testing.expectEqual(@as(u32, 0), try grid.getRow(9));
-    try std.testing.expectEqual(@as(u32, 1), try grid.getRow(11));
-    try std.testing.expectEqual(@as(u32, 9), try grid.getRow(99));
+    try std.testing.expectEqual(@as(u32, 0), try grid.getX(0));
+    try std.testing.expectEqual(@as(u32, 3), try grid.getX(3));
+    try std.testing.expectEqual(@as(u32, 9), try grid.getX(9));
+    try std.testing.expectEqual(@as(u32, 0), try grid.getX(10));
+    try std.testing.expectEqual(@as(u32, 3), try grid.getX(13));
+    try std.testing.expectEqual(@as(u32, 9), try grid.getX(19));
+    try std.testing.expectEqual(@as(u32, 9), try grid.getX(99));
 
     // Test OutOfIndexError cases
-    try std.testing.expectError(error.OutOfBounds, grid.getRow(100));
+    try std.testing.expectError(error.OutOfBounds, grid.getX(100));
+}
+
+test "test getY" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+
+    try std.testing.expectEqual(@as(u32, 0), try grid.getY(0));
+    try std.testing.expectEqual(@as(u32, 0), try grid.getY(9));
+    try std.testing.expectEqual(@as(u32, 1), try grid.getY(11));
+    try std.testing.expectEqual(@as(u32, 9), try grid.getY(99));
+
+    // Test OutOfIndexError cases
+    try std.testing.expectError(error.OutOfBounds, grid.getY(100));
+}
+
+test "test getIndex" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+
+    // a: row = 1, col = 2, idx = 12
+    // b: row = 0, col = 0, idx = 0
+    // c: row = 8, col = 4, idx = 84
+    // d: row = 9, col = 9, idx = 99
+
+    // b * * * * * * * * *
+    // * * a * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * c * * * * *
+    // * * * * * * * * * d
+
+    try std.testing.expectEqual(@as(usize, 0), try grid.getIndex(0, 0));
+    try std.testing.expectEqual(@as(usize, 12), try grid.getIndex(2, 1));
+    try std.testing.expectEqual(@as(usize, 84), try grid.getIndex(4, 8));
+    try std.testing.expectEqual(@as(usize, 99), try grid.getIndex(9, 9));
+
+    // Test OutOfIndexError cases
+    try std.testing.expectError(error.OutOfBounds, grid.getIndex(10, 0));
+}
+
+test "test liveNeighbourCount" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+    grid.cells[3] = .alive;
+    grid.cells[11] = .alive;
+    grid.cells[22] = .alive;
+
+    // row = 1, col = 2, idx = 12
+    // * D D A * * * * * *
+    // * A x D * * * * * *
+    // * D A D * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+
+    try std.testing.expectEqual(@as(u8, 3), try grid.liveNeighbourCount(2, 1));
 }
