@@ -50,6 +50,9 @@ pub fn build(b: *std.Build) void {
 
     const grid_unit_tests = b.addTest(.{ .root_source_file = .{ .path = "src/grid.zig" }, .target = target, .optimize = optimize });
 
+    // Add grid units tests to zig-out/bin
+    b.installArtifact(grid_unit_tests);
+
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const run_grid_unit_tests = b.addRunArtifact(grid_unit_tests);
 
