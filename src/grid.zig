@@ -178,11 +178,8 @@ test "test liveNeighbourCount" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
     var grid = try Grid.init(grid_width, grid_height);
-    grid.cells[3] = .alive;
-    grid.cells[11] = .alive;
-    grid.cells[22] = .alive;
 
-    // row = 1, col = 2, idx = 12
+    // x= 2, y = 1
     // * D D A * * * * * *
     // * A x D * * * * * *
     // * D A D * * * * * *
@@ -193,6 +190,127 @@ test "test liveNeighbourCount" {
     // * * * * * * * * * *
     // * * * * * * * * * *
     // * * * * * * * * * *
+    grid.cells[3] = .alive;
+    grid.cells[11] = .alive;
+    grid.cells[22] = .alive;
 
     try std.testing.expectEqual(@as(u8, 3), try grid.liveNeighbourCount(2, 1));
+
+    // x = 8, y = 8
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * A
+    // * * * * * * * * x *
+    // * * * * * * * * * A
+    grid.cells[79] = .alive;
+    grid.cells[99] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 2), try grid.liveNeighbourCount(8, 8));
+
+    // Corner cases, all of these should return zero
+    // x = 0, y = 0
+    // X * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * A
+    // * * * * * * * * x *
+    // * * * * * * * * * A
+
+}
+
+test "test liveNeighbourCount upper left corner" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+
+    // x = 0, y = 0
+    // X A * * * * * * * *
+    // A A * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    grid.cells[1] = .alive;
+    grid.cells[10] = .alive;
+    grid.cells[11] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(0, 0));
+}
+
+test "test liveNeighbourCount upper right corner" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+
+    // x = 9, y = 0
+    // * * * * * * * * A X
+    // * * * * * * * * * A
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    grid.cells[8] = .alive;
+    grid.cells[19] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(9, 0));
+}
+
+test "test liveNeighbourCount lower right corner" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+
+    // x = 9, y = 9
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * A
+    // * * * * * * * * A X
+    grid.cells[89] = .alive;
+    grid.cells[98] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(9, 9));
+}
+
+test "test liveNeighbourCount lower left corner" {
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+
+    // x = 0, y = 9
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * * * * * * * * * *
+    // * A * * * * * * * *
+    // x * * * * * * * * *
+    grid.cells[81] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(0, 9));
 }
