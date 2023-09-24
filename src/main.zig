@@ -4,7 +4,12 @@ const c = @cImport({
     @cInclude("SDL.h");
 });
 
+const Cell = @import("grid.zig").Cell;
 const Grid = @import("grid.zig").Grid;
+
+// Constants
+const HEIGHT = 640;
+const WIDTH = 480;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
@@ -41,16 +46,24 @@ fn gameLoop(renderer: *c.SDL_Renderer) void {
     }
 }
 
+fn gameLoopSurface() void {}
+
 pub fn main() !void {
     _ = c.SDL_Init(c.SDL_INIT_VIDEO);
     defer c.SDL_Quit();
 
-    var window = c.SDL_CreateWindow("Conway's Game of Life, in Zig!", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, 640, 480, 0);
+    var window = c.SDL_CreateWindow("Conway's Game of Life, in Zig!", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, HEIGHT, WIDTH, 0);
     var renderer = c.SDL_CreateRenderer(window, 0, c.SDL_RENDERER_PRESENTVSYNC);
     defer c.SDL_DestroyRenderer(renderer);
 
-    var grid = Grid.init();
-    grid.print();
+    var surface = c.SDL_GetWindowSurface(window);
+    _ = surface;
+    //var grid_array: [10 * 10]Cell = undefined;
+    const grid_width: u32 = 10;
+    const grid_height: u32 = 10;
+    var grid = try Grid.init(grid_width, grid_height);
+    try grid.tick();
+    //grid.print();
     gameLoop(renderer.?);
 }
 
