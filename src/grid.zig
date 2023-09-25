@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Pixel = @import("main.zig").Pixel;
+
 pub const Cell = enum { dead, alive };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,11 +14,12 @@ pub const Grid = struct {
     width: u32,
     height: u32,
     cells: []Cell,
+    pixels: ?[*]Pixel,
     generation: u32,
 
-    pub fn init(width: u32, height: u32) !Self {
+    pub fn init(width: u32, height: u32, pixels: ?[*]Pixel) !Self {
         var cells: []Cell = try allocator.alloc(Cell, width * height);
-        return Self{ .width = width, .height = height, .cells = cells, .generation = 0 };
+        return Self{ .width = width, .height = height, .cells = cells, .pixels = pixels, .generation = 0 };
     }
 
     /// Formula index(x, y) = y * width + x
@@ -102,21 +105,54 @@ pub const Grid = struct {
         defer allocator.free(new_cells);
         @memcpy(new_cells, self.cells);
 
-        // Update the new cells with the next generation
-        for (self.cells, 0..) |cell, idx| {
-            std.debug.print("Cell: {}, idx: {}\n", .{ cell, idx });
+        for (0..self.height) |y| {
+            for (0..self.width) |x| {
+                var live_neighbour_count = try self.liveNeighbourCount(x, y);
+                if (live_neighbour_count < 2) {
+                    new_cells[y * self.width + x] = .dead;
+                } else if (live_neighbour_count == 2 or live_neighbour_count == 3) {
+                    new_cells[y * self.width + x] = .alive;
+                } else if (live_neighbour_count > 3) {
+                    new_cells[y * self.width + x] = .dead;
+                } else if (self.cells[y * self.width + x] == .dead and live_neighbour_count == 3) {
+                    new_cells[y * self.width + x] = .alive;
+                }
+            }
         }
+
+        @memcpy(self.cells, new_cells);
     }
 
     pub fn print(self: *Self) void {
         std.debug.print("width: {}\n height: {}\n cells_len: {}, generation: {}", .{ self.width, self.height, self.cells.len, self.generation });
+    }
+
+    pub fn draw(self: *Self) void {
+        for (0..self.height) |y| {
+            for (0..self.width) |x| {
+                switch (self.cells[y * self.width + x]) {
+                    .alive => {
+                        self.pixels.?[y * self.width + x].b = 255;
+                        self.pixels.?[y * self.width + x].g = 255;
+                        self.pixels.?[y * self.width + x].r = 255;
+                        self.pixels.?[y * self.width + x].a = 255;
+                    },
+                    .dead => {
+                        self.pixels.?[y * self.width + x].b = 0;
+                        self.pixels.?[y * self.width + x].g = 0;
+                        self.pixels.?[y * self.width + x].r = 0;
+                        self.pixels.?[y * self.width + x].a = 0;
+                    },
+                }
+            }
+        }
     }
 };
 
 test "test getX" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     try std.testing.expectEqual(@as(u32, 0), try grid.getX(0));
     try std.testing.expectEqual(@as(u32, 3), try grid.getX(3));
@@ -133,7 +169,7 @@ test "test getX" {
 test "test getY" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     try std.testing.expectEqual(@as(u32, 0), try grid.getY(0));
     try std.testing.expectEqual(@as(u32, 0), try grid.getY(9));
@@ -147,7 +183,7 @@ test "test getY" {
 test "test getIndex" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     // a: row = 1, col = 2, idx = 12
     // b: row = 0, col = 0, idx = 0
@@ -177,7 +213,7 @@ test "test getIndex" {
 test "test liveNeighbourCount" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     // x= 2, y = 1
     // * D D A * * * * * *
@@ -230,7 +266,7 @@ test "test liveNeighbourCount" {
 test "test liveNeighbourCount upper left corner" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     // x = 0, y = 0
     // X A * * * * * * * *
@@ -253,7 +289,7 @@ test "test liveNeighbourCount upper left corner" {
 test "test liveNeighbourCount upper right corner" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     // x = 9, y = 0
     // * * * * * * * * A X
@@ -275,7 +311,7 @@ test "test liveNeighbourCount upper right corner" {
 test "test liveNeighbourCount lower right corner" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     // x = 9, y = 9
     // * * * * * * * * * *
@@ -297,7 +333,7 @@ test "test liveNeighbourCount lower right corner" {
 test "test liveNeighbourCount lower left corner" {
     const grid_width: u32 = 10;
     const grid_height: u32 = 10;
-    var grid = try Grid.init(grid_width, grid_height);
+    var grid = try Grid.init(grid_width, grid_height, null);
 
     // x = 0, y = 9
     // * * * * * * * * * *
