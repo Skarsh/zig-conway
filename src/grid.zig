@@ -19,6 +19,9 @@ pub const Grid = struct {
 
     pub fn init(width: u32, height: u32, pixels: ?[*]Pixel) !Self {
         var cells: []Cell = try allocator.alloc(Cell, width * height);
+        cells[14] = .alive;
+        cells[15] = .alive;
+        cells[17] = .alive;
         return Self{ .width = width, .height = height, .cells = cells, .pixels = pixels, .generation = 0 };
     }
 
