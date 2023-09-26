@@ -19,9 +19,6 @@ pub const Grid = struct {
 
     pub fn init(width: u32, height: u32, pixels: ?[*]Pixel) !Self {
         var cells: []Cell = try allocator.alloc(Cell, width * height);
-        cells[14] = .alive;
-        cells[15] = .alive;
-        cells[17] = .alive;
         return Self{ .width = width, .height = height, .cells = cells, .pixels = pixels, .generation = 0 };
     }
 
@@ -92,6 +89,16 @@ pub const Grid = struct {
         return count;
     }
 
+    fn liveCellsCount(self: Self) u32 {
+        var count: u32 = 0;
+        for (self.cells) |cell| {
+            if (cell == .alive) {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
     /// The universe of the Game of Life is an infinite two-dimensional orthogonal grid of square cells,
     /// each of which is in one of two possible states, alive or dead, or "populated" or "unpopulated".
     /// Every cell interacts with its eight neighbours, which are the cells that are horizontally, vertically,
@@ -106,28 +113,49 @@ pub const Grid = struct {
         const cells_len: usize = self.cells.len;
         var new_cells: []Cell = try allocator.alloc(Cell, cells_len);
         defer allocator.free(new_cells);
-        @memcpy(new_cells, self.cells);
+        var new_cells_many_ptr: [*]Cell = @ptrCast(new_cells);
+        clearCellsToDead(new_cells_many_ptr, new_cells.len);
 
+        var idx: usize = 0;
         for (0..self.height) |y| {
             for (0..self.width) |x| {
                 var live_neighbour_count = try self.liveNeighbourCount(x, y);
-                if (live_neighbour_count < 2) {
-                    new_cells[y * self.width + x] = .dead;
-                } else if (live_neighbour_count == 2 or live_neighbour_count == 3) {
-                    new_cells[y * self.width + x] = .alive;
-                } else if (live_neighbour_count > 3) {
-                    new_cells[y * self.width + x] = .dead;
-                } else if (self.cells[y * self.width + x] == .dead and live_neighbour_count == 3) {
-                    new_cells[y * self.width + x] = .alive;
+                var current_cell = self.cells[idx];
+                if (current_cell == .alive and live_neighbour_count < 2) {
+                    new_cells[idx] = .dead;
+                } else if (current_cell == .alive and (live_neighbour_count == 2 or live_neighbour_count == 3)) {
+                    new_cells[idx] = .alive;
+                } else if (current_cell == .alive and live_neighbour_count > 3) {
+                    new_cells[idx] = .dead;
+                } else if (self.cells[idx] == .dead and live_neighbour_count == 3) {
+                    new_cells[idx] = .alive;
                 }
+                idx += 1;
             }
         }
 
         @memcpy(self.cells, new_cells);
     }
 
-    pub fn print(self: *Self) void {
-        std.debug.print("width: {}\n height: {}\n cells_len: {}, generation: {}", .{ self.width, self.height, self.cells.len, self.generation });
+    pub fn print(self: *Self) !void {
+        var idx: usize = 0;
+        for (0..self.height) |y| {
+            _ = y;
+            for (0..self.width) |x| {
+                _ = x;
+                const cell = self.cells[idx];
+                switch (cell) {
+                    .alive => {
+                        std.debug.print("A ", .{});
+                    },
+                    .dead => {
+                        std.debug.print("D ", .{});
+                    },
+                }
+                idx += 1;
+            }
+            std.debug.print("\n", .{});
+        }
     }
 
     pub fn draw(self: *Self) void {
@@ -147,6 +175,20 @@ pub const Grid = struct {
                         self.pixels.?[y * self.width + x].a = 0;
                     },
                 }
+            }
+        }
+    }
+
+    pub fn clearCellsToDead(cells: [*]Cell, len: usize) void {
+        for (0..len) |idx| {
+            cells[idx] = .dead;
+        }
+    }
+
+    pub fn setEveryOtherAlive(cells: [*]Cell, len: usize) void {
+        for (0..len) |idx| {
+            if (@mod(idx, 2) == 0) {
+                cells[idx] = .alive;
             }
         }
     }
@@ -352,4 +394,85 @@ test "test liveNeighbourCount lower left corner" {
     grid.cells[81] = .alive;
 
     try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(0, 9));
+}
+
+test "test tick 1" {
+    const grid_width: u32 = 4;
+    const grid_height: u32 = 4;
+    var grid = try Grid.init(grid_width, grid_height, null);
+    var new_cells: [*]Cell = @ptrCast(grid.cells);
+    Grid.clearCellsToDead(new_cells, grid.cells.len);
+
+    // Cell to test
+    // x = 2, y = 1, .alive
+    // A * * *
+    // * X * *
+    // * * A *
+    // * * * *
+
+    grid.cells[0] = .alive;
+    grid.cells[5] = .alive;
+    grid.cells[10] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 2), try grid.liveNeighbourCount(1, 1));
+    var idx = try grid.getIndex(1, 1);
+
+    try std.testing.expectEqual(Cell.alive, grid.cells[idx]);
+
+    try grid.tick();
+
+    // Expected outcomefter tick
+    // Cell to test
+    // x = 2, y = 1, X .alive
+    // A * * *
+    // * X * *
+    // * * A *
+    // * * * *
+
+    try std.testing.expectEqual(Cell.alive, grid.cells[idx]);
+    try std.testing.expectEqual(@as(u32, 1), grid.liveCellsCount());
+}
+
+test "test tick 2" {
+    const grid_width: u32 = 4;
+    const grid_height: u32 = 4;
+    var grid = try Grid.init(grid_width, grid_height, null);
+    var new_cells: [*]Cell = @ptrCast(grid.cells);
+    Grid.clearCellsToDead(new_cells, grid.cells.len);
+
+    // Cell to test
+    // x = 2, y = 1, X is .alive
+    // A * A *
+    // * X * *
+    // A * A *
+    // * * * *
+
+    grid.cells[0] = .alive;
+    grid.cells[2] = .alive;
+    grid.cells[5] = .alive;
+    grid.cells[8] = .alive;
+    grid.cells[10] = .alive;
+
+    try std.testing.expectEqual(@as(u8, 4), try grid.liveNeighbourCount(1, 1));
+    try std.testing.expectEqual(@as(u32, 5), grid.liveCellsCount());
+    var idx = try grid.getIndex(1, 1);
+
+    try std.testing.expectEqual(Cell.alive, grid.cells[idx]);
+    try grid.tick();
+
+    // Expected outcomefter tick
+    // Cell to test
+    // x = 2, y = 1, .dead
+    // * A * *
+    // A X A *
+    // * A * *
+    // * * * *
+
+    try std.testing.expectEqual(Cell.dead, grid.cells[idx]);
+    try std.testing.expectEqual(Cell.alive, grid.cells[1]);
+    try std.testing.expectEqual(Cell.alive, grid.cells[4]);
+    try std.testing.expectEqual(Cell.alive, grid.cells[6]);
+    try std.testing.expectEqual(Cell.alive, grid.cells[9]);
+
+    try std.testing.expectEqual(@as(u32, 4), grid.liveCellsCount());
 }

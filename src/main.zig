@@ -8,8 +8,8 @@ const Cell = @import("grid.zig").Cell;
 const Grid = @import("grid.zig").Grid;
 
 // Constants
-const HEIGHT = 640;
-const WIDTH = 480;
+const HEIGHT = 1920;
+const WIDTH = 1080;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
@@ -54,7 +54,9 @@ pub fn main() !void {
     var pixels: ?[*]Pixel = @ptrCast(surface.*.pixels);
 
     var grid = try Grid.init(WIDTH, HEIGHT, pixels);
-    try grid.tick();
+    var new_cells: [*]Cell = @ptrCast(grid.cells);
+    Grid.clearCellsToDead(new_cells, grid.cells.len);
+    Grid.setEveryOtherAlive(new_cells, grid.cells.len);
 
     try gameLoop(&grid, window.?);
 }
