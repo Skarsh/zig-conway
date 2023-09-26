@@ -14,7 +14,6 @@ const WIDTH = 1080;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
-//fn gameLoop(renderer: *c.SDL_Renderer) void {
 fn gameLoop(grid: *Grid, window: *c.SDL_Window) !void {
     mainloop: while (true) {
         var sdl_event: c.SDL_Event = undefined;
