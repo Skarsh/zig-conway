@@ -53,9 +53,15 @@ pub fn main() !void {
     var pixels: ?[*]Pixel = @ptrCast(surface.*.pixels);
 
     var grid = try Grid.init(WIDTH, HEIGHT, pixels);
-    var new_cells: [*]Cell = @ptrCast(grid.cells);
-    Grid.clearCellsToDead(new_cells, grid.cells.len);
-    Grid.setEveryOtherAlive(new_cells, grid.cells.len);
+    defer grid.deinit();
+    var current_gen_cells: [*]Cell = @ptrCast(grid.current_cells);
+    var next_gen_cells: [*]Cell = @ptrCast(grid.next_gen_cells);
+    Grid.clearCellsToDead(current_gen_cells, grid.current_cells.len);
+    Grid.clearCellsToDead(next_gen_cells, grid.next_gen_cells.len);
+
+    // Setting the initial conditions of the simulation
+    //Grid.setEveryOtherAlive(new_cells, grid.cells.len);
+    Grid.setCellsRandomlyAlive(&grid.prng, current_gen_cells, grid.current_cells.len);
 
     try gameLoop(&grid, window.?);
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const DefaultPrng = std.rand.DefaultPrng;
 
 const Pixel = @import("main.zig").Pixel;
 
@@ -13,13 +14,26 @@ pub const Grid = struct {
     pub const Self = @This();
     width: u32,
     height: u32,
-    cells: []Cell,
+    current_cells: []Cell,
+    next_gen_cells: []Cell,
     pixels: ?[*]Pixel,
     generation: u32,
+    prng: DefaultPrng,
 
     pub fn init(width: u32, height: u32, pixels: ?[*]Pixel) !Self {
-        var cells: []Cell = try allocator.alloc(Cell, width * height);
-        return Self{ .width = width, .height = height, .cells = cells, .pixels = pixels, .generation = 0 };
+        var current_cells: []Cell = try allocator.alloc(Cell, width * height);
+        var next_gen_cells: []Cell = try allocator.alloc(Cell, width * height);
+        var prng = DefaultPrng.init(blk: {
+            var seed: u64 = undefined;
+            try std.os.getrandom(std.mem.asBytes(&seed));
+            break :blk seed;
+        });
+        return Self{ .width = width, .height = height, .current_cells = current_cells, .next_gen_cells = next_gen_cells, .pixels = pixels, .generation = 0, .prng = prng };
+    }
+
+    pub fn deinit(self: Self) void {
+        defer allocator.free(self.current_cells);
+        defer allocator.free(self.next_gen_cells);
     }
 
     /// Formula index(x, y) = y * width + x
@@ -77,7 +91,7 @@ pub const Grid = struct {
                         var neighbour_y_idx_usize: usize = @intCast(neighbour_y_idx);
 
                         var idx = try self.getIndex(neighbour_x_idx_usize, neighbour_y_idx_usize);
-                        if (self.cells[idx] == .alive) {
+                        if (self.current_cells[idx] == .alive) {
                             count += 1;
                         }
                     }
@@ -91,7 +105,7 @@ pub const Grid = struct {
 
     fn liveCellsCount(self: Self) u32 {
         var count: u32 = 0;
-        for (self.cells) |cell| {
+        for (self.current_cells) |cell| {
             if (cell == .alive) {
                 count += 1;
             }
@@ -110,31 +124,31 @@ pub const Grid = struct {
     pub fn tick(self: *Self) !void {
 
         // Make copy of the old cells state, this allocates each tick, which is pretty unecessary
-        const cells_len: usize = self.cells.len;
-        var new_cells: []Cell = try allocator.alloc(Cell, cells_len);
-        defer allocator.free(new_cells);
-        var new_cells_many_ptr: [*]Cell = @ptrCast(new_cells);
-        clearCellsToDead(new_cells_many_ptr, new_cells.len);
+        const cells_len: usize = self.current_cells.len;
+        _ = cells_len;
+        var next_gen_cells_many_ptr: [*]Cell = @ptrCast(self.next_gen_cells);
+        clearCellsToDead(next_gen_cells_many_ptr, self.next_gen_cells.len);
 
         var idx: usize = 0;
         for (0..self.height) |y| {
             for (0..self.width) |x| {
                 var live_neighbour_count = try self.liveNeighbourCount(x, y);
-                var current_cell = self.cells[idx];
+                var current_cell = self.current_cells[idx];
                 if (current_cell == .alive and live_neighbour_count < 2) {
-                    new_cells[idx] = .dead;
+                    self.next_gen_cells[idx] = .dead;
                 } else if (current_cell == .alive and (live_neighbour_count == 2 or live_neighbour_count == 3)) {
-                    new_cells[idx] = .alive;
+                    self.next_gen_cells[idx] = .alive;
                 } else if (current_cell == .alive and live_neighbour_count > 3) {
-                    new_cells[idx] = .dead;
-                } else if (self.cells[idx] == .dead and live_neighbour_count == 3) {
-                    new_cells[idx] = .alive;
+                    self.next_gen_cells[idx] = .dead;
+                } else if (self.current_cells[idx] == .dead and live_neighbour_count == 3) {
+                    self.next_gen_cells[idx] = .alive;
                 }
                 idx += 1;
             }
         }
 
-        @memcpy(self.cells, new_cells);
+        @memcpy(self.current_cells, self.next_gen_cells);
+        self.generation += 1;
     }
 
     pub fn print(self: *Self) !void {
@@ -143,7 +157,7 @@ pub const Grid = struct {
             _ = y;
             for (0..self.width) |x| {
                 _ = x;
-                const cell = self.cells[idx];
+                const cell = self.current_cells[idx];
                 switch (cell) {
                     .alive => {
                         std.debug.print("A ", .{});
@@ -161,7 +175,7 @@ pub const Grid = struct {
     pub fn draw(self: *Self) void {
         for (0..self.height) |y| {
             for (0..self.width) |x| {
-                switch (self.cells[y * self.width + x]) {
+                switch (self.current_cells[y * self.width + x]) {
                     .alive => {
                         self.pixels.?[y * self.width + x].b = 255;
                         self.pixels.?[y * self.width + x].g = 255;
@@ -188,6 +202,15 @@ pub const Grid = struct {
     pub fn setEveryOtherAlive(cells: [*]Cell, len: usize) void {
         for (0..len) |idx| {
             if (@mod(idx, 2) == 0) {
+                cells[idx] = .alive;
+            }
+        }
+    }
+
+    pub fn setCellsRandomlyAlive(prng: *DefaultPrng, cells: [*]Cell, len: usize) void {
+        for (0..len) |idx| {
+            const rand = prng.random();
+            if (@mod(rand.int(u32), 4) == 0) {
                 cells[idx] = .alive;
             }
         }
@@ -271,9 +294,9 @@ test "test liveNeighbourCount" {
     // * * * * * * * * * *
     // * * * * * * * * * *
     // * * * * * * * * * *
-    grid.cells[3] = .alive;
-    grid.cells[11] = .alive;
-    grid.cells[22] = .alive;
+    grid.current_cells[3] = .alive;
+    grid.current_cells[11] = .alive;
+    grid.current_cells[22] = .alive;
 
     try std.testing.expectEqual(@as(u8, 3), try grid.liveNeighbourCount(2, 1));
 
@@ -288,8 +311,8 @@ test "test liveNeighbourCount" {
     // * * * * * * * * * A
     // * * * * * * * * x *
     // * * * * * * * * * A
-    grid.cells[79] = .alive;
-    grid.cells[99] = .alive;
+    grid.current_cells[79] = .alive;
+    grid.current_cells[99] = .alive;
 
     try std.testing.expectEqual(@as(u8, 2), try grid.liveNeighbourCount(8, 8));
 
@@ -324,9 +347,9 @@ test "test liveNeighbourCount upper left corner" {
     // * * * * * * * * * *
     // * * * * * * * * * *
     // * * * * * * * * * *
-    grid.cells[1] = .alive;
-    grid.cells[10] = .alive;
-    grid.cells[11] = .alive;
+    grid.current_cells[1] = .alive;
+    grid.current_cells[10] = .alive;
+    grid.current_cells[11] = .alive;
 
     try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(0, 0));
 }
@@ -347,8 +370,8 @@ test "test liveNeighbourCount upper right corner" {
     // * * * * * * * * * *
     // * * * * * * * * * *
     // * * * * * * * * * *
-    grid.cells[8] = .alive;
-    grid.cells[19] = .alive;
+    grid.current_cells[8] = .alive;
+    grid.current_cells[19] = .alive;
 
     try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(9, 0));
 }
@@ -369,8 +392,8 @@ test "test liveNeighbourCount lower right corner" {
     // * * * * * * * * * *
     // * * * * * * * * * A
     // * * * * * * * * A X
-    grid.cells[89] = .alive;
-    grid.cells[98] = .alive;
+    grid.current_cells[89] = .alive;
+    grid.current_cells[98] = .alive;
 
     try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(9, 9));
 }
@@ -391,7 +414,7 @@ test "test liveNeighbourCount lower left corner" {
     // * * * * * * * * * *
     // * A * * * * * * * *
     // x * * * * * * * * *
-    grid.cells[81] = .alive;
+    grid.current_cells[81] = .alive;
 
     try std.testing.expectEqual(@as(u8, 0), try grid.liveNeighbourCount(0, 9));
 }
@@ -400,8 +423,8 @@ test "test tick 1" {
     const grid_width: u32 = 4;
     const grid_height: u32 = 4;
     var grid = try Grid.init(grid_width, grid_height, null);
-    var new_cells: [*]Cell = @ptrCast(grid.cells);
-    Grid.clearCellsToDead(new_cells, grid.cells.len);
+    var new_cells: [*]Cell = @ptrCast(grid.current_cells);
+    Grid.clearCellsToDead(new_cells, grid.current_cells.len);
 
     // Cell to test
     // x = 2, y = 1, .alive
@@ -410,14 +433,14 @@ test "test tick 1" {
     // * * A *
     // * * * *
 
-    grid.cells[0] = .alive;
-    grid.cells[5] = .alive;
-    grid.cells[10] = .alive;
+    grid.current_cells[0] = .alive;
+    grid.current_cells[5] = .alive;
+    grid.current_cells[10] = .alive;
 
     try std.testing.expectEqual(@as(u8, 2), try grid.liveNeighbourCount(1, 1));
     var idx = try grid.getIndex(1, 1);
 
-    try std.testing.expectEqual(Cell.alive, grid.cells[idx]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[idx]);
 
     try grid.tick();
 
@@ -429,50 +452,52 @@ test "test tick 1" {
     // * * A *
     // * * * *
 
-    try std.testing.expectEqual(Cell.alive, grid.cells[idx]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[idx]);
     try std.testing.expectEqual(@as(u32, 1), grid.liveCellsCount());
 }
 
 test "test tick 2" {
-    const grid_width: u32 = 4;
-    const grid_height: u32 = 4;
+    const grid_width: u32 = 5;
+    const grid_height: u32 = 5;
     var grid = try Grid.init(grid_width, grid_height, null);
-    var new_cells: [*]Cell = @ptrCast(grid.cells);
-    Grid.clearCellsToDead(new_cells, grid.cells.len);
+    var new_cells: [*]Cell = @ptrCast(grid.current_cells);
+    Grid.clearCellsToDead(new_cells, grid.current_cells.len);
 
     // Cell to test
-    // x = 2, y = 1, X is .alive
-    // A * A *
-    // * X * *
-    // A * A *
-    // * * * *
+    // x = 2, y = 2, X is .alive, idx = 12
+    // * * * * *
+    // * A * A *
+    // * * X * *
+    // * A * A *
+    // * * * * *
 
-    grid.cells[0] = .alive;
-    grid.cells[2] = .alive;
-    grid.cells[5] = .alive;
-    grid.cells[8] = .alive;
-    grid.cells[10] = .alive;
+    grid.current_cells[6] = .alive;
+    grid.current_cells[8] = .alive;
+    grid.current_cells[12] = .alive;
+    grid.current_cells[16] = .alive;
+    grid.current_cells[18] = .alive;
 
-    try std.testing.expectEqual(@as(u8, 4), try grid.liveNeighbourCount(1, 1));
+    try std.testing.expectEqual(@as(u8, 4), try grid.liveNeighbourCount(2, 2));
     try std.testing.expectEqual(@as(u32, 5), grid.liveCellsCount());
-    var idx = try grid.getIndex(1, 1);
+    var idx = try grid.getIndex(2, 2);
 
-    try std.testing.expectEqual(Cell.alive, grid.cells[idx]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[idx]);
     try grid.tick();
 
     // Expected outcomefter tick
     // Cell to test
-    // x = 2, y = 1, .dead
-    // * A * *
-    // A X A *
-    // * A * *
-    // * * * *
+    // x = 2, y = 2, .dead, idx = 12
+    // * * * * *
+    // * * A * *
+    // * A X A *
+    // * * A * *
+    // * * * * *
 
-    try std.testing.expectEqual(Cell.dead, grid.cells[idx]);
-    try std.testing.expectEqual(Cell.alive, grid.cells[1]);
-    try std.testing.expectEqual(Cell.alive, grid.cells[4]);
-    try std.testing.expectEqual(Cell.alive, grid.cells[6]);
-    try std.testing.expectEqual(Cell.alive, grid.cells[9]);
+    try std.testing.expectEqual(Cell.dead, grid.current_cells[idx]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[7]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[11]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[13]);
+    try std.testing.expectEqual(Cell.alive, grid.current_cells[17]);
 
     try std.testing.expectEqual(@as(u32, 4), grid.liveCellsCount());
 }
