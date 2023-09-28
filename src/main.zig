@@ -39,7 +39,14 @@ pub fn main() !void {
     _ = c.SDL_Init(c.SDL_INIT_VIDEO);
     defer c.SDL_Quit();
 
-    var window = c.SDL_CreateWindow("Conway's Game of Life, in Zig!", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, HEIGHT, WIDTH, 0);
+    var window = c.SDL_CreateWindow(
+        "Conway's Game of Life, in Zig!",
+        c.SDL_WINDOWPOS_CENTERED,
+        c.SDL_WINDOWPOS_CENTERED,
+        HEIGHT,
+        WIDTH,
+        0,
+    );
     var renderer = c.SDL_CreateRenderer(window, 0, c.SDL_RENDERER_PRESENTVSYNC);
     defer c.SDL_DestroyRenderer(renderer);
 

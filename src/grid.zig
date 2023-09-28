@@ -28,7 +28,15 @@ pub const Grid = struct {
             try std.os.getrandom(std.mem.asBytes(&seed));
             break :blk seed;
         });
-        return Self{ .width = width, .height = height, .current_cells = current_cells, .next_gen_cells = next_gen_cells, .pixels = pixels, .generation = 0, .prng = prng };
+        return Self{
+            .width = width,
+            .height = height,
+            .current_cells = current_cells,
+            .next_gen_cells = next_gen_cells,
+            .pixels = pixels,
+            .generation = 0,
+            .prng = prng,
+        };
     }
 
     pub fn deinit(self: Self) void {
