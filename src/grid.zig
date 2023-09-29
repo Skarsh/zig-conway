@@ -1,4 +1,5 @@
 const std = @import("std");
+const c = @import("c.zig").c;
 const DefaultPrng = std.rand.DefaultPrng;
 
 const Pixel = @import("main.zig").Pixel;
@@ -10,8 +11,23 @@ const allocator = gpa.allocator();
 
 const IndexOutOfBoundsError = error{OutOfBounds};
 
+pub const Rect = struct {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+};
+
 pub const Grid = struct {
     pub const Self = @This();
+    //width: u32,
+    //height: u32,
+    //current_cells: []Cell,
+    //next_gen_cells: []Cell,
+    //pixels: ?[*]Pixel,
+    //generation: u32,
+    //prng: DefaultPrng,
+
     width: u32,
     height: u32,
     current_cells: []Cell,
@@ -19,6 +35,31 @@ pub const Grid = struct {
     pixels: ?[*]Pixel,
     generation: u32,
     prng: DefaultPrng,
+    rects: [*]c.SDL_Rect,
+
+    pub fn init_with_rects(width: u32, height: u32) !Self {
+        var current_cells: []Cell = try allocator.alloc(Cell, width * height);
+        var next_gen_cells: []Cell = try allocator.alloc(Cell, width * height);
+        var rects: []c.SDL_Rect = try allocator.alloc(c.SDL_Rect, width * height);
+        var cells_many_ptr: [*]c.SDL_Rect = @ptrCast(rects);
+        _ = cells_many_ptr;
+
+        var prng = DefaultPrng.init(blk: {
+            var seed: u64 = undefined;
+            try std.os.getrandom(std.mem.asBytes(&seed));
+            break :blk seed;
+        });
+
+        return Self{
+            .width = width,
+            .height = height,
+            .current_cells = current_cells,
+            .next_gen_cells = next_gen_cells,
+            .pixels = undefined,
+            .generation = 0,
+            .prng = prng,
+        };
+    }
 
     pub fn init(width: u32, height: u32, pixels: ?[*]Pixel) !Self {
         var current_cells: []Cell = try allocator.alloc(Cell, width * height);
