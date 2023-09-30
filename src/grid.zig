@@ -3,6 +3,8 @@ const c = @import("c.zig").c;
 const DefaultPrng = std.rand.DefaultPrng;
 
 const Pixel = @import("main.zig").Pixel;
+const CELL_WIDTH = @import("main.zig").CELL_WIDTH;
+const CELL_HEIGHT = @import("main.zig").CELL_HEIGHT;
 
 pub const Cell = enum { dead, alive };
 
@@ -11,38 +13,21 @@ const allocator = gpa.allocator();
 
 const IndexOutOfBoundsError = error{OutOfBounds};
 
-pub const Rect = struct {
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-};
-
 pub const Grid = struct {
     pub const Self = @This();
-    //width: u32,
-    //height: u32,
-    //current_cells: []Cell,
-    //next_gen_cells: []Cell,
-    //pixels: ?[*]Pixel,
-    //generation: u32,
-    //prng: DefaultPrng,
-
     width: u32,
     height: u32,
     current_cells: []Cell,
     next_gen_cells: []Cell,
-    pixels: ?[*]Pixel,
     generation: u32,
     prng: DefaultPrng,
-    rects: [*]c.SDL_Rect,
+    rects: []c.SDL_Rect,
+    renderer: ?*c.SDL_Renderer,
 
-    pub fn init_with_rects(width: u32, height: u32) !Self {
+    pub fn init(width: u32, height: u32, renderer: ?*c.SDL_Renderer) !Self {
         var current_cells: []Cell = try allocator.alloc(Cell, width * height);
         var next_gen_cells: []Cell = try allocator.alloc(Cell, width * height);
         var rects: []c.SDL_Rect = try allocator.alloc(c.SDL_Rect, width * height);
-        var cells_many_ptr: [*]c.SDL_Rect = @ptrCast(rects);
-        _ = cells_many_ptr;
 
         var prng = DefaultPrng.init(blk: {
             var seed: u64 = undefined;
@@ -55,34 +40,37 @@ pub const Grid = struct {
             .height = height,
             .current_cells = current_cells,
             .next_gen_cells = next_gen_cells,
-            .pixels = undefined,
             .generation = 0,
             .prng = prng,
+            .rects = rects,
+            .renderer = renderer,
         };
     }
 
-    pub fn init(width: u32, height: u32, pixels: ?[*]Pixel) !Self {
-        var current_cells: []Cell = try allocator.alloc(Cell, width * height);
-        var next_gen_cells: []Cell = try allocator.alloc(Cell, width * height);
-        var prng = DefaultPrng.init(blk: {
-            var seed: u64 = undefined;
-            try std.os.getrandom(std.mem.asBytes(&seed));
-            break :blk seed;
-        });
-        return Self{
-            .width = width,
-            .height = height,
-            .current_cells = current_cells,
-            .next_gen_cells = next_gen_cells,
-            .pixels = pixels,
-            .generation = 0,
-            .prng = prng,
-        };
+    pub fn init_rects(self: *Self) void {
+        var border_size: c_int = 2;
+        for (0..self.height) |y| {
+            for (0..self.width) |x| {
+                const x_cint: c_int = @intCast(x);
+                const y_cint: c_int = @intCast(y);
+
+                const cell_width_cint: c_int = @intCast(CELL_WIDTH);
+                const cell_height_cint: c_int = @intCast(CELL_HEIGHT);
+
+                self.rects[y * self.width + x] = c.SDL_Rect{
+                    .x = (x_cint * cell_width_cint) + border_size,
+                    .y = (y_cint * cell_height_cint) + border_size,
+                    .w = cell_width_cint - (border_size * 2),
+                    .h = cell_height_cint - (border_size * 2),
+                };
+            }
+        }
     }
 
     pub fn deinit(self: Self) void {
         defer allocator.free(self.current_cells);
         defer allocator.free(self.next_gen_cells);
+        defer allocator.free(self.rects);
     }
 
     /// Formula index(x, y) = y * width + x
@@ -221,24 +209,46 @@ pub const Grid = struct {
         }
     }
 
-    pub fn draw(self: *Self) void {
-        for (0..self.height) |y| {
-            for (0..self.width) |x| {
-                switch (self.current_cells[y * self.width + x]) {
-                    .alive => {
-                        self.pixels.?[y * self.width + x].b = 255;
-                        self.pixels.?[y * self.width + x].g = 255;
-                        self.pixels.?[y * self.width + x].r = 255;
-                        self.pixels.?[y * self.width + x].a = 255;
-                    },
-                    .dead => {
-                        self.pixels.?[y * self.width + x].b = 0;
-                        self.pixels.?[y * self.width + x].g = 0;
-                        self.pixels.?[y * self.width + x].r = 0;
-                        self.pixels.?[y * self.width + x].a = 0;
-                    },
-                }
+    pub fn draw(self: Self) void {
+
+        // Batching draw calls to rects, would increase performance
+        //_ = c.SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+        //_ = c.SDL_RenderDrawRects(renderer, cells_many_ptr, num_cells_horizontal_cint * num_cells_vertical_cint);
+        //_ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        //_ = c.SDL_RenderFillRects(renderer, cells_many_ptr, num_cells_horizontal_cint * num_cells_vertical_cint);
+
+        for (0..(self.width * self.height)) |rect_idx| {
+            if (self.current_cells[rect_idx] == .alive) {
+                _ = c.SDL_SetRenderDrawColor(self.renderer, 255, 255, 255, 255);
+                _ = c.SDL_RenderFillRect(self.renderer, &self.rects[rect_idx]);
+            } else {
+                _ = c.SDL_SetRenderDrawColor(self.renderer, 100, 100, 100, 255);
+                _ = c.SDL_RenderDrawRect(self.renderer, &self.rects[rect_idx]);
+                _ = c.SDL_SetRenderDrawColor(self.renderer, 64, 64, 64, 255);
+                _ = c.SDL_RenderFillRect(self.renderer, &self.rects[rect_idx]);
             }
+        }
+        c.SDL_RenderPresent(self.renderer);
+    }
+
+    pub fn handleMouseEvent(self: *Self, event: c.SDL_MouseButtonEvent, cell_width: c_int, cell_height: c_int) void {
+        switch (event.button) {
+            c.SDL_BUTTON_LEFT => {
+                var x: c_int = 0;
+                var y: c_int = 0;
+                _ = c.SDL_GetMouseState(&x, &y);
+                var rect_x = @divFloor(x, cell_width);
+                var rect_y = @divFloor(y, cell_height);
+                var width_cint: c_int = @intCast(self.width);
+                var cell_idx = (rect_y * width_cint) + rect_x;
+                var cell_idx_usize: usize = @intCast(cell_idx);
+                if (self.current_cells[cell_idx_usize] == .alive) {
+                    self.current_cells[cell_idx_usize] = .dead;
+                } else {
+                    self.current_cells[cell_idx_usize] = .alive;
+                }
+            },
+            else => {},
         }
     }
 

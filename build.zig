@@ -16,10 +16,12 @@ pub fn build(b: *std.Build) void {
 
     const sdl2_include_path = std.Build.LazyPath{ .path = ".\\deps\\sdl2\\include" };
     const sdl2_library_path = std.Build.LazyPath{ .path = ".\\deps\\sdl2\\lib\\x64" };
+
     exe.addIncludePath(sdl2_include_path);
     exe.addLibraryPath(sdl2_library_path);
     b.installBinFile(".\\deps\\sdl2\\" ++ "lib\\x64\\SDL2.dll", "SDL2.dll");
     exe.linkSystemLibrary("SDL2");
+
     exe.linkLibC();
 
     b.installArtifact(exe);
@@ -48,7 +50,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Since this essentially is making a new binary for testing grid.zig, we need to
+    // link in libC and SDL2 into that binary aswell.
     const grid_unit_tests = b.addTest(.{ .root_source_file = .{ .path = "src/grid.zig" }, .target = target, .optimize = optimize });
+    grid_unit_tests.addIncludePath(sdl2_include_path);
+    grid_unit_tests.addLibraryPath(sdl2_library_path);
+    grid_unit_tests.linkSystemLibrary("SDL2");
+    grid_unit_tests.linkLibC();
 
     // Add grid units tests to zig-out/bin
     b.installArtifact(grid_unit_tests);
