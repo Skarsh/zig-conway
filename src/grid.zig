@@ -113,8 +113,9 @@ pub const Grid = struct {
             var row: i32 = -1;
             while (row <= 1) : (row += 1) {
                 while (col <= 1) : (col += 1) {
+                    // This is the check for the cell itself, should not do anything here.
                     if (row == 0 and col == 0) {
-                        //continue;
+                        // continue
                     } else {
                         // TODO: This is sooo soo bad, find a better way
                         var x_i32: i32 = @intCast(x);
