@@ -10,3 +10,8 @@ SDL2 are required, under the deps folder, look at `build.zig` for how the path s
 
 ## Building
 `zig build` 
+
+## Play
+This is fairly limited and tailormade to what I wanted to do.
+When startin up there is a board, where each cell can edited by left clicking.
+When pressing SPACE bar th simulation will start. Press R to reset to the init edit phase.

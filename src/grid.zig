@@ -2,7 +2,6 @@ const std = @import("std");
 const c = @import("c.zig").c;
 const DefaultPrng = std.rand.DefaultPrng;
 
-const Pixel = @import("main.zig").Pixel;
 const CELL_WIDTH = @import("main.zig").CELL_WIDTH;
 const CELL_HEIGHT = @import("main.zig").CELL_HEIGHT;
 
@@ -161,8 +160,6 @@ pub const Grid = struct {
     pub fn tick(self: *Self) !void {
 
         // Make copy of the old cells state, this allocates each tick, which is pretty unecessary
-        const cells_len: usize = self.current_cells.len;
-        _ = cells_len;
         var next_gen_cells_many_ptr: [*]Cell = @ptrCast(self.next_gen_cells);
         clearCellsToDead(next_gen_cells_many_ptr, self.next_gen_cells.len);
 
@@ -186,27 +183,6 @@ pub const Grid = struct {
 
         @memcpy(self.current_cells, self.next_gen_cells);
         self.generation += 1;
-    }
-
-    pub fn print(self: *Self) !void {
-        var idx: usize = 0;
-        for (0..self.height) |y| {
-            _ = y;
-            for (0..self.width) |x| {
-                _ = x;
-                const cell = self.current_cells[idx];
-                switch (cell) {
-                    .alive => {
-                        std.debug.print("A ", .{});
-                    },
-                    .dead => {
-                        std.debug.print("D ", .{});
-                    },
-                }
-                idx += 1;
-            }
-            std.debug.print("\n", .{});
-        }
     }
 
     pub fn draw(self: Self) void {
@@ -258,21 +234,21 @@ pub const Grid = struct {
         }
     }
 
-    pub fn setEveryOtherAlive(cells: [*]Cell, len: usize) void {
-        for (0..len) |idx| {
-            if (@mod(idx, 2) == 0) {
-                cells[idx] = .alive;
+    pub fn setCellsRandomlyAlive(self: *Self) void {
+        for (0..self.width * self.height) |idx| {
+            const rand = self.prng.random();
+            if (@mod(rand.int(u32), 4) == 0) {
+                self.current_cells[idx] = .alive;
             }
         }
     }
 
-    pub fn setCellsRandomlyAlive(prng: *DefaultPrng, cells: [*]Cell, len: usize) void {
-        for (0..len) |idx| {
-            const rand = prng.random();
-            if (@mod(rand.int(u32), 4) == 0) {
-                cells[idx] = .alive;
-            }
-        }
+    pub fn reset(self: *Self) void {
+        var current_cells_many_ptr: [*]Cell = @ptrCast(self.current_cells);
+        clearCellsToDead(current_cells_many_ptr, self.current_cells.len);
+
+        var next_gen_cells_many_ptr: [*]Cell = @ptrCast(self.next_gen_cells);
+        clearCellsToDead(next_gen_cells_many_ptr, self.next_gen_cells.len);
     }
 };
 

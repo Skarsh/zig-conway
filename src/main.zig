@@ -4,17 +4,17 @@ const c = @import("c.zig").c;
 const Grid = @import("grid.zig").Grid;
 
 // Constants
-const WINDOW_WIDTH = 1920;
-const WINDOW_HEIGHT = 1080;
+const WINDOW_WIDTH = 2560;
+const WINDOW_HEIGHT = 1440;
 
-pub const CELL_WIDTH: u32 = 20;
-pub const CELL_HEIGHT: u32 = 20;
+pub const CELL_WIDTH: u32 = 10;
+pub const CELL_HEIGHT: u32 = 10;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
 fn gameLoopRects(grid: *Grid) !void {
-    var space_pressed = false;
+    var run_simulation = false;
     mainloop: while (true) {
         var sdl_event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&sdl_event) != 0) {
@@ -28,18 +28,22 @@ fn gameLoopRects(grid: *Grid) !void {
                 c.SDL_KEYDOWN => {
                     switch (sdl_event.key.keysym.scancode) {
                         c.SDL_SCANCODE_SPACE => {
-                            std.debug.print("SPACE!!!", .{});
-                            space_pressed = true;
+                            run_simulation = true;
                         },
+                        c.SDL_SCANCODE_R => {
+                            run_simulation = false;
+                            grid.reset();
+                        },
+                        c.SDL_SCANCODE_ESCAPE => break :mainloop,
                         else => {},
                     }
                 },
                 else => {},
             }
         }
-        if (space_pressed) {
+        if (run_simulation) {
             try grid.tick();
-            std.time.sleep(1_000_000_000);
+            std.time.sleep(10_000_000);
         }
         grid.draw();
     }
@@ -57,6 +61,7 @@ pub fn main() !void {
         WINDOW_HEIGHT,
         0,
     );
+
     var renderer = c.SDL_CreateRenderer(window, 0, c.SDL_VIDEO_RENDER_OGL);
 
     _ = c.SDL_SetHint(c.SDL_HINT_RENDER_BATCHING, "1");
@@ -69,6 +74,7 @@ pub fn main() !void {
     defer grid.deinit();
 
     grid.init_rects();
+    grid.setCellsRandomlyAlive();
 
     try gameLoopRects(&grid);
 }
